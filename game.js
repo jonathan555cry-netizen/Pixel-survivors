@@ -1,139 +1,168 @@
 const canvas = document.getElementById("game");
 const ctx = canvas.getContext("2d");
 
-canvas.width = 640;
-canvas.height = 360;
-
-// ===== ÁUDIOS =====
-const music = new Audio("assets/audio/music.mp3");
-const engine = new Audio("assets/audio/engine.mp3");
-const victory = new Audio("assets/audio/victory.mp3");
-
-music.loop = true;
-engine.loop = true;
-
-// ===== ESTADO =====
 let state = "menu";
+let keys = {};
+let save = JSON.parse(localStorage.getItem("pixelSave")) || { fase: 1 };
 
-// ===== SAVE =====
-let save = JSON.parse(localStorage.getItem("pixelSave")) || {
-  fase: 1,
-  vida: 100
-};
+document.addEventListener("keydown", e => keys[e.key] = true);
+document.addEventListener("keyup", e => keys[e.key] = false);
 
-// ===== PLAYER =====
-const player = {
-  x: 100,
-  y: 180,
-  size: 16,
+/* ====== AUDIO (GERADO POR CÓDIGO) ====== */
+const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+let engineOsc, musicOsc;
+
+function playMusic() {
+  if (musicOsc) return;
+  musicOsc = audioCtx.createOscillator();
+  musicOsc.type = "sawtooth";
+  musicOsc.frequency.value = 80;
+  musicOsc.connect(audioCtx.destination);
+  musicOsc.start();
+}
+
+function stopMusic() {
+  if (!musicOsc) return;
+  musicOsc.stop();
+  musicOsc = null;
+}
+
+function engineSound(on) {
+  if (on && !engineOsc) {
+    engineOsc = audioCtx.createOscillator();
+    engineOsc.type = "square";
+    engineOsc.frequency.value = 120;
+    engineOsc.connect(audioCtx.destination);
+    engineOsc.start();
+  }
+  if (!on && engineOsc) {
+    engineOsc.stop();
+    engineOsc = null;
+  }
+}
+
+function victorySound() {
+  let o = audioCtx.createOscillator();
+  o.frequency.value = 600;
+  o.connect(audioCtx.destination);
+  o.start();
+  setTimeout(() => o.stop(), 400);
+}
+
+/* ====== PLAYER ====== */
+let player = {
+  x: 50,
+  y: 260,
+  w: 16,
+  h: 16,
   speed: 2,
-  vida: save.vida,
-  bike: false
+  onBike: false
 };
 
-// ===== INIMIGO =====
-let enemy = {
-  x: 500,
-  y: 180,
-  size: 16,
-  vida: 50
+let boss = {
+  x: 520,
+  y: 250,
+  life: 50
 };
 
-// ===== CONTROLES =====
-const keys = {};
-addEventListener("keydown", e => keys[e.key] = true);
-addEventListener("keyup", e => keys[e.key] = false);
-
-// ===== MENU =====
-function drawMenu() {
-  ctx.fillStyle = "#000";
-  ctx.fillRect(0,0,canvas.width,canvas.height);
-  ctx.fillStyle = "#fff";
-  ctx.font = "20px monospace";
-  ctx.fillText("PIXEL SURVIVORS", 200, 120);
-  ctx.font = "14px monospace";
-  ctx.fillText("Pressione ENTER para começar", 170, 180);
+/* ====== SAVE ====== */
+function saveGame() {
+  localStorage.setItem("pixelSave", JSON.stringify({ fase: save.fase }));
 }
 
-// ===== UPDATE =====
+/* ====== UPDATE ====== */
 function update() {
-  if (state === "game") {
-    if (keys["w"]) player.y -= player.speed;
-    if (keys["s"]) player.y += player.speed;
-    if (keys["a"]) player.x -= player.speed;
-    if (keys["d"]) player.x += player.speed;
-
-    // Colisão inimigo
-    if (Math.abs(player.x - enemy.x) < 16 &&
-        Math.abs(player.y - enemy.y) < 16) {
-      enemy.vida -= 1;
-    }
-
-    // Derrota inimigo
-    if (enemy.vida <= 0) {
-      state = "final";
-      music.pause();
-      victory.play();
-      localStorage.removeItem("pixelSave");
-    }
-
-    // Save automático
-    localStorage.setItem("pixelSave", JSON.stringify({
-      fase: 1,
-      vida: player.vida
-    }));
-  }
-}
-
-// ===== DRAW =====
-function drawGame() {
-  ctx.fillStyle = "#111";
-  ctx.fillRect(0,0,canvas.width,canvas.height);
-
-  // Player
-  ctx.fillStyle = "#00ff88";
-  ctx.fillRect(player.x, player.y, player.size, player.size);
-
-  // Moto
-  if (player.bike) {
-    ctx.fillStyle = "#888";
-    ctx.fillRect(player.x-6, player.y+10, 28, 6);
-  }
-
-  // Inimigo
-  ctx.fillStyle = "#ff3333";
-  ctx.fillRect(enemy.x, enemy.y, enemy.size, enemy.size);
-
-  ctx.fillStyle = "#fff";
-  ctx.fillText("Vida: " + player.vida, 10, 20);
-}
-
-// ===== FINAL =====
-function drawFinal() {
-  ctx.fillStyle = "#000";
-  ctx.fillRect(0,0,canvas.width,canvas.height);
-  ctx.fillStyle = "#fff";
-  ctx.font = "16px monospace";
-  ctx.fillText("A esperança sobreviveu...", 180, 150);
-  ctx.fillText("Criado por Jonathan Pereira", 170, 200);
-}
-
-// ===== LOOP =====
-function loop() {
   if (state === "menu") {
-    drawMenu();
     if (keys["Enter"]) {
+      audioCtx.resume();
+      playMusic();
       state = "game";
-      music.play();
     }
-  } 
-  else if (state === "game") {
-    update();
-    drawGame();
-  } 
-  else if (state === "final") {
-    drawFinal();
   }
+
+  if (state === "game") {
+    let moving = false;
+
+    if (keys["a"]) { player.x -= player.speed; moving = true; }
+    if (keys["d"]) { player.x += player.speed; moving = true; }
+
+    engineSound(moving && player.onBike);
+
+    // pegar moto
+    if (!player.onBike && Math.abs(player.x - 200) < 20) {
+      if (keys["e"]) {
+        player.onBike = true;
+        player.speed = 4;
+      }
+    }
+
+    // boss
+    if (player.x > boss.x - 20) {
+      boss.life -= 0.2;
+      if (boss.life <= 0) {
+        victorySound();
+        stopMusic();
+        save.fase = 2;
+        saveGame();
+        state = "ending";
+      }
+    }
+  }
+}
+
+/* ====== DRAW ====== */
+function draw() {
+  ctx.fillStyle = "#111";
+  ctx.fillRect(0,0,640,360);
+
+  if (state === "menu") {
+    ctx.fillStyle = "#fff";
+    ctx.font = "24px monospace";
+    ctx.fillText("PIXEL SURVIVORS", 170, 140);
+    ctx.font = "14px monospace";
+    ctx.fillText("Pressione ENTER", 240, 180);
+  }
+
+  if (state === "game") {
+    // chão
+    ctx.fillStyle = "#222";
+    ctx.fillRect(0, 300, 640, 60);
+
+    // moto
+    if (!player.onBike) {
+      ctx.fillStyle = "#0f0";
+      ctx.fillRect(200, 270, 20, 10);
+    }
+
+    // player (pixel art)
+    ctx.fillStyle = "#4af";
+    ctx.fillRect(player.x, player.y, player.w, player.h);
+
+    // boss
+    ctx.fillStyle = "#f44";
+    ctx.fillRect(boss.x, boss.y, 24, 24);
+
+    ctx.fillStyle = "#fff";
+    ctx.fillText("Vida Boss: " + Math.floor(boss.life), 10, 20);
+    ctx.fillText("E = pegar moto", 10, 40);
+  }
+
+  if (state === "ending") {
+    ctx.fillStyle = "#000";
+    ctx.fillRect(0,0,640,360);
+
+    ctx.fillStyle = "#fff";
+    ctx.font = "18px monospace";
+    ctx.fillText("A esperança sobreviveu.", 160, 150);
+    ctx.font = "14px monospace";
+    ctx.fillText("Criado por Jonathan Pereira", 190, 190);
+  }
+}
+
+/* ====== LOOP ====== */
+function loop() {
+  update();
+  draw();
   requestAnimationFrame(loop);
 }
 
