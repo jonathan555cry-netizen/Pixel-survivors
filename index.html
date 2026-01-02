@@ -2,27 +2,42 @@
 <html lang="pt-br">
 <head>
 <meta charset="UTF-8">
-<title>Pixel Survivors – Echoes of Hope</title>
+<title>Pixel Survivors</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
 <style>
 body {
   margin: 0;
   background: black;
   color: white;
   font-family: monospace;
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  height: 100vh;
+  text-align: center;
 }
 canvas {
-  border: 2px solid #333;
+  background: #111;
   image-rendering: pixelated;
+  max-width: 100%;
+}
+#controls {
+  display: flex;
+  justify-content: space-around;
+  margin: 10px;
+}
+button {
+  padding: 14px 18px;
+  font-size: 16px;
 }
 </style>
 </head>
 <body>
 
+<h3>Pixel Survivors</h3>
 <canvas id="game" width="640" height="360"></canvas>
+
+<div id="controls">
+  <button ontouchstart="left=true" ontouchend="left=false">◀</button>
+  <button ontouchstart="right=true" ontouchend="right=false">▶</button>
+  <button ontouchstart="action=true" ontouchend="action=false">AÇÃO</button>
+</div>
 
 <script src="game.js"></script>
 </body>
