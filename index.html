@@ -1,0 +1,241 @@
+const canvas = document.getElementById("game");
+const ctx = canvas.getContext("2d");
+
+canvas.width = 640;
+canvas.height = 360;
+
+/* ===== MUNDO ===== */
+const world = {
+  width: 2000,
+  height: 2000
+};
+
+/* ===== CÂMERA ===== */
+const camera = { x: 0, y: 0 };
+
+/* ===== PLAYER ===== */
+const player = {
+  x: 1000,
+  y: 1000,
+  size: 16,
+  speed: 2,
+  life: 100,
+  ammo: 12,
+  medkits: 1
+};
+
+/* ===== CONTROLES ===== */
+const keys = {};
+document.addEventListener("keydown", e => keys[e.key.toLowerCase()] = true);
+document.addEventListener("keyup", e => keys[e.key.toLowerCase()] = false);
+
+/* ===== TIROS ===== */
+let bullets = [];
+
+/* ===== INIMIGOS ===== */
+let enemies = [];
+let boss = null;
+let gameEnd = false;
+
+/* ===== ITENS ===== */
+let items = [];
+
+/* ===== SPAWNS ===== */
+function spawnEnemies() {
+  enemies = [];
+  for (let i = 0; i < 15; i++) {
+    enemies.push({
+      x: Math.random() * world.width,
+      y: Math.random() * world.height,
+      size: 16,
+      life: 40,
+      speed: 0.5
+    });
+  }
+}
+
+function spawnItems() {
+  items = [];
+  for (let i = 0; i < 12; i++) {
+    items.push({
+      x: Math.random() * world.width,
+      y: Math.random() * world.height,
+      type: Math.random() > 0.5 ? "ammo" : "medkit"
+    });
+  }
+}
+
+function spawnBoss() {
+  boss = {
+    x: world.width / 2,
+    y: world.height / 2,
+    size: 40,
+    life: 300,
+    speed: 0.4
+  };
+}
+
+spawnEnemies();
+spawnItems();
+
+/* ===== INPUT DE AÇÃO ===== */
+document.addEventListener("keydown", e => {
+  if (e.code === "Space" && player.ammo > 0 && !gameEnd) {
+    bullets.push({
+      x: player.x,
+      y: player.y,
+      dx: 4,
+      dy: 0
+    });
+    player.ammo--;
+  }
+
+  if (e.key.toLowerCase() === "h" && player.medkits > 0 && player.life < 100) {
+    player.life = Math.min(100, player.life + 40);
+    player.medkits--;
+  }
+});
+
+/* ===== UPDATE ===== */
+function update() {
+  if (gameEnd) return;
+
+  if (keys["w"]) player.y -= player.speed;
+  if (keys["s"]) player.y += player.speed;
+  if (keys["a"]) player.x -= player.speed;
+  if (keys["d"]) player.x += player.speed;
+
+  player.x = Math.max(0, Math.min(world.width, player.x));
+  player.y = Math.max(0, Math.min(world.height, player.y));
+
+  camera.x = player.x - canvas.width / 2;
+  camera.y = player.y - canvas.height / 2;
+  camera.x = Math.max(0, Math.min(world.width - canvas.width, camera.x));
+  camera.y = Math.max(0, Math.min(world.height - canvas.height, camera.y));
+
+  bullets.forEach(b => b.x += b.dx);
+
+  enemies.forEach(enemy => {
+    if (enemy.x < player.x) enemy.x += enemy.speed;
+    if (enemy.x > player.x) enemy.x -= enemy.speed;
+    if (enemy.y < player.y) enemy.y += enemy.speed;
+    if (enemy.y > player.y) enemy.y -= enemy.speed;
+
+    if (Math.abs(enemy.x - player.x) < 14 &&
+        Math.abs(enemy.y - player.y) < 14) {
+      player.life -= 0.15;
+    }
+  });
+
+  bullets.forEach((b, bi) => {
+    enemies.forEach((e, ei) => {
+      if (Math.abs(b.x - e.x) < 10 &&
+          Math.abs(b.y - e.y) < 10) {
+        e.life -= 20;
+        bullets.splice(bi, 1);
+        if (e.life <= 0) enemies.splice(ei, 1);
+      }
+    });
+  });
+
+  if (enemies.length === 0 && !boss) {
+    spawnBoss();
+  }
+
+  if (boss) {
+    if (boss.x < player.x) boss.x += boss.speed;
+    if (boss.x > player.x) boss.x -= boss.speed;
+    if (boss.y < player.y) boss.y += boss.speed;
+    if (boss.y > player.y) boss.y -= boss.speed;
+
+    if (Math.abs(boss.x - player.x) < 30 &&
+        Math.abs(boss.y - player.y) < 30) {
+      player.life -= 0.5;
+    }
+
+    bullets.forEach((b, bi) => {
+      if (Math.abs(b.x - boss.x) < boss.size / 2 &&
+          Math.abs(b.y - boss.y) < boss.size / 2) {
+        boss.life -= 10;
+        bullets.splice(bi, 1);
+        if (boss.life <= 0) {
+          boss = null;
+          gameEnd = true;
+        }
+      }
+    });
+  }
+
+  items.forEach((item, index) => {
+    if (Math.abs(item.x - player.x) < 20 &&
+        Math.abs(item.y - player.y) < 20 &&
+        keys["e"]) {
+      if (item.type === "ammo") player.ammo += 6;
+      if (item.type === "medkit") player.medkits += 1;
+      items.splice(index, 1);
+    }
+  });
+
+  if (player.life <= 0) gameEnd = true;
+}
+
+/* ===== DRAW ===== */
+function draw() {
+  ctx.fillStyle = "#000";
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+  ctx.save();
+  ctx.translate(-camera.x, -camera.y);
+
+  ctx.strokeStyle = "#222";
+  ctx.strokeRect(0, 0, world.width, world.height);
+
+  items.forEach(item => {
+    ctx.fillStyle = item.type === "ammo" ? "#ffff00" : "#00ffff";
+    ctx.fillRect(item.x, item.y, 10, 10);
+  });
+
+  ctx.fillStyle = "#00ff88";
+  ctx.fillRect(player.x, player.y, player.size, player.size);
+
+  ctx.fillStyle = "#fff";
+  bullets.forEach(b => ctx.fillRect(b.x, b.y, 4, 2));
+
+  ctx.fillStyle = "#ff3333";
+  enemies.forEach(e => ctx.fillRect(e.x, e.y, e.size, e.size));
+
+  if (boss) {
+    ctx.fillStyle = "#880000";
+    ctx.fillRect(boss.x, boss.y, boss.size, boss.size);
+
+    ctx.fillStyle = "#ff0000";
+    ctx.fillRect(boss.x, boss.y - 8, boss.life / 2, 4);
+  }
+
+  ctx.restore();
+
+  ctx.fillStyle = "#fff";
+  ctx.font = "14px monospace";
+  ctx.fillText("Vida: " + Math.floor(player.life), 10, 20);
+  ctx.fillText("Balas: " + player.ammo, 10, 40);
+  ctx.fillText("Kits: " + player.medkits, 10, 60);
+  ctx.fillText("Inimigos: " + enemies.length, 10, 80);
+
+  if (gameEnd) {
+    ctx.fillStyle = "rgba(0,0,0,0.7)";
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    ctx.fillStyle = "#fff";
+    ctx.font = "18px monospace";
+    ctx.fillText("Você sobreviveu.", 220, 160);
+    ctx.fillText("Ainda existe esperança.", 180, 200);
+  }
+}
+
+/* ===== LOOP ===== */
+function loop() {
+  update();
+  draw();
+  requestAnimationFrame(loop);
+}
+
+loop();
