@@ -13,8 +13,26 @@ body {
 }
 canvas {
   display:block;
-  margin:auto;
   background:#111;
+}
+
+/* BOTÃO START (SOBRE O JOGO) */
+#startOverlay {
+  position:fixed;
+  inset:0;
+  background:black;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  z-index:10;
+}
+
+#startBtn {
+  padding:20px 40px;
+  font-size:22px;
+  background:#111;
+  color:white;
+  border:2px solid white;
 }
 
 /* CONTROLES MOBILE */
@@ -26,6 +44,7 @@ canvas {
   display:flex;
   justify-content:space-between;
   padding:10px;
+  z-index:5;
 }
 .btn {
   width:70px;
@@ -38,39 +57,21 @@ canvas {
   line-height:70px;
   user-select:none;
 }
-#rightControls {
-  display:flex;
-  gap:10px;
-}
-
-/* BOTÃO START */
-#startBtn {
-  position:fixed;
-  top:50%;
-  left:50%;
-  transform:translate(-50%,-50%);
-  padding:20px 40px;
-  font-size:22px;
-  background:#111;
-  color:white;
-  border:2px solid white;
-  display:none;
-}
 </style>
 </head>
 
 <body>
 
-<canvas id="game"></canvas>
+<div id="startOverlay">
+  <button id="startBtn">INICIAR</button>
+</div>
 
-<button id="startBtn">INICIAR</button>
+<canvas id="game"></canvas>
 
 <div id="controls">
   <div class="btn" id="left">◀</div>
   <div class="btn" id="right">▶</div>
-  <div id="rightControls">
-    <div class="btn" id="attack">🔥</div>
-  </div>
+  <div class="btn" id="attack">🔥</div>
 </div>
 
 <script>
@@ -90,66 +91,58 @@ let keys = {};
 document.addEventListener("keydown", e => keys[e.key] = true);
 document.addEventListener("keyup", e => keys[e.key] = false);
 
-/* MOBILE */
-const leftBtn = document.getElementById("left");
-const rightBtn = document.getElementById("right");
-const attackBtn = document.getElementById("attack");
-const startBtn = document.getElementById("startBtn");
+document.getElementById("left").ontouchstart = () => keys["ArrowLeft"] = true;
+document.getElementById("left").ontouchend   = () => keys["ArrowLeft"] = false;
+document.getElementById("right").ontouchstart = () => keys["ArrowRight"] = true;
+document.getElementById("right").ontouchend   = () => keys["ArrowRight"] = false;
+document.getElementById("attack").ontouchstart = () => keys[" "] = true;
+document.getElementById("attack").ontouchend   = () => keys[" "] = false;
 
-leftBtn.ontouchstart = () => keys["ArrowLeft"] = true;
-leftBtn.ontouchend   = () => keys["ArrowLeft"] = false;
-rightBtn.ontouchstart = () => keys["ArrowRight"] = true;
-rightBtn.ontouchend   = () => keys["ArrowRight"] = false;
-attackBtn.ontouchstart = () => keys[" "] = true;
-attackBtn.ontouchend   = () => keys[" "] = false;
-
-startBtn.onclick = () => {
-  state = "game";
-  startBtn.style.display="none";
-};
-
-/* ===== GAME ===== */
+/* ===== GAME STATE ===== */
 let state = "menu";
 let cameraX = 0;
 
-let player = {
-  x:100, life:100,
-  attack:10, speed:2,
-  fury:false
-};
-
+let player = { x:100, life:100, attack:10, speed:2, fury:false };
 let dog = { alive:true };
 let zombies = [];
 let bullets = [];
+let boss = { x:2000, life:300 };
 
-let boss = {
-  x:2000, life:300
+/* START */
+document.getElementById("startBtn").onclick = () => {
+  state = "game";
+  document.getElementById("startOverlay").style.display = "none";
 };
 
-function spawnZombie(){
-  zombies.push({ x:cameraX + canvas.width + 50, life:30 });
-}
+/* PC ENTER */
+document.addEventListener("keydown", e=>{
+  if(e.key==="Enter" && state==="menu"){
+    state="game";
+    document.getElementById("startOverlay").style.display="none";
+  }
+});
 
 /* ===== LOOP ===== */
 function loop(){
-  if(state==="menu") drawMenu();
   if(state==="game") updateGame();
   if(state==="boss") updateBoss();
   if(state==="end") drawEnd();
   requestAnimationFrame(loop);
 }
 
-/* ===== GAMEPLAY ===== */
+/* ===== GAME ===== */
+function spawnZombie(){
+  zombies.push({ x:cameraX + canvas.width + 50, life:30 });
+}
+
 function updateGame(){
   cameraX += player.speed;
 
   if(keys["ArrowLeft"]) player.x -= 3;
   if(keys["ArrowRight"]) player.x += 3;
-
   if(keys[" "]) bullets.push({ x:player.x + 20 });
 
   bullets.forEach(b => b.x += 6);
-
   if(Math.random()<0.02) spawnZombie();
 
   zombies.forEach(z=>{
@@ -170,11 +163,9 @@ function updateGame(){
   zombies = zombies.filter(z=>z.life>0);
 
   if(cameraX>1500) state="boss";
-
   drawWorld();
 }
 
-/* ===== BOSS ===== */
 function updateBoss(){
   if(dog.alive){
     dog.alive=false;
@@ -184,11 +175,10 @@ function updateBoss(){
   }
 
   if(keys[" "]) boss.life -= player.attack*0.1;
-
   drawWorld();
 
   ctx.fillStyle="darkred";
-  ctx.fillRect(boss.x-cameraX, canvas.height-180, 80, 120);
+  ctx.fillRect(boss.x-cameraX, canvas.height-180, 80,120);
   ctx.fillStyle="white";
   ctx.fillText("BOSS VIDA: "+Math.floor(boss.life),20,40);
 
@@ -198,56 +188,37 @@ function updateBoss(){
 /* ===== DRAW ===== */
 function drawWorld(){
   ctx.clearRect(0,0,canvas.width,canvas.height);
-
   ctx.fillStyle="#1a1a1a";
   ctx.fillRect(0,0,canvas.width,canvas.height);
 
   ctx.fillStyle="#2e2e2e";
   for(let i=0;i<20;i++){
-    ctx.fillRect((i*200 - cameraX*0.3)%2000, canvas.height-350, 80, 250);
+    ctx.fillRect((i*200-cameraX*0.3)%2000, canvas.height-350,80,250);
   }
 
   ctx.fillStyle="#333";
   ctx.fillRect(0,canvas.height-80,canvas.width,80);
 
   ctx.fillStyle=player.fury?"red":"white";
-  ctx.fillRect(player.x, canvas.height-100, 20,20);
+  ctx.fillRect(player.x, canvas.height-100,20,20);
 
   if(dog.alive){
     ctx.fillStyle="brown";
-    ctx.fillRect(player.x-25, canvas.height-95, 15,10);
+    ctx.fillRect(player.x-25, canvas.height-95,15,10);
   }
 
   ctx.fillStyle="green";
   zombies.forEach(z=>{
-    ctx.fillRect(z.x-cameraX, canvas.height-100, 20,20);
+    ctx.fillRect(z.x-cameraX, canvas.height-100,20,20);
   });
 
   ctx.fillStyle="yellow";
   bullets.forEach(b=>{
-    ctx.fillRect(b.x-cameraX, canvas.height-90, 5,2);
+    ctx.fillRect(b.x-cameraX, canvas.height-90,5,2);
   });
 
   ctx.fillStyle="white";
   ctx.fillText("Vida: "+Math.floor(player.life),10,20);
-}
-
-/* ===== TELAS ===== */
-function drawMenu(){
-  ctx.fillStyle="black";
-  ctx.fillRect(0,0,canvas.width,canvas.height);
-  ctx.fillStyle="white";
-  ctx.font="28px monospace";
-  ctx.fillText("ECHOES OF HOPE", canvas.width/2-140, canvas.height/2-40);
-  ctx.font="16px monospace";
-  ctx.fillText("PC: ENTER | MOBILE: BOTÃO", canvas.width/2-140, canvas.height/2);
-
-  startBtn.style.display="block";
-
-  if(keys["Enter"]){
-    state="game";
-    startBtn.style.display="none";
-  }
 }
 
 function drawEnd(){
@@ -257,8 +228,8 @@ function drawEnd(){
   ctx.font="18px monospace";
   let txt=[
     "A cidade caiu.",
-    "Seu companheiro se foi.",
-    "Mas você lutou até o fim.",
+    "Seu companheiro morreu.",
+    "Mas você venceu.",
     "",
     "Criado por:",
     "Jonathan Pereira"
