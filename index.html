@@ -13,123 +13,96 @@ canvas{image-rendering:pixelated;border:3px solid #333}
 <canvas id="game" width="640" height="480"></canvas>
 
 <script>
-/* ================= AUDIO ================= */
-const AudioCtx=window.AudioContext||window.webkitAudioContext;
-const audio=new AudioCtx();
-let musicOsc=null;
-
-function playMusic(freq){
-  if(musicOsc)musicOsc.stop();
-  musicOsc=audio.createOscillator();
-  const gain=audio.createGain();
-  musicOsc.frequency.value=freq;
-  musicOsc.type="sawtooth";
-  gain.gain.value=0.02;
-  musicOsc.connect(gain).connect(audio.destination);
-  musicOsc.start();
-}
-
-function sfx(freq,time=0.1){
-  const o=audio.createOscillator(),g=audio.createGain();
-  o.frequency.value=freq;
-  g.gain.value=0.05;
-  o.connect(g).connect(audio.destination);
-  o.start();
-  o.stop(audio.currentTime+time);
-}
-
-/* ================= GAME ================= */
 const c=document.getElementById("game"),ctx=c.getContext("2d");
+
+/* ================= CONTROLES ================= */
 const k={};
-document.addEventListener("keydown",e=>{k[e.key.toLowerCase()]=true;audio.resume();});
+document.addEventListener("keydown",e=>k[e.key.toLowerCase()]=true);
 document.addEventListener("keyup",e=>k[e.key.toLowerCase()]=false);
 
-let room=1,state="game",rage=false,dogAlive=true,cutscene=false,credits=false;
-let cutText="",cutChar=0,scrollY=500;
+/* ================= ESTADO ================= */
+let room=1,state="game",gameOver=false;
+let rage=false,dogAlive=true;
 
 /* ================= PLAYER ================= */
-const p={x:320,y:400,life:100,speed:2};
-const dog={x:300,y:420};
+const p={x:320,y:380,life:100,speed:2};
 
-/* ================= BOSS ================= */
-const boss={x:320,y:120,life1:250,life2:250,spawn:0,throw:0};
+/* ================= CACHORRO ================= */
+const dog={x:300,y:400};
 
-/* ================= ARRAYS ================= */
+/* ================= INIMIGOS ================= */
 let zombies=[],bullets=[],enemyShots=[];
 
-/* ================= SPAWN ================= */
+/* ================= BOSS ================= */
+const boss={x:320,y:140,life1:250,life2:250,spawn:80,throw:40};
+
+/* ================= FUNÇÕES ================= */
 function spawnZombies(n){
   zombies=[];
   for(let i=0;i<n;i++){
     zombies.push({
       x:Math.random()*560+40,
-      y:Math.random()*220+80,
-      life:30,atk:0,throw:80
+      y:Math.random()*260+80,
+      life:30,atk:0,throw:90
     });
   }
 }
 spawnZombies(10);
-playMusic(90);
 
 /* ================= UPDATE ================= */
 function update(){
-  if(credits){
-    scrollY-=0.5;
-    return;
-  }
-
-  if(cutscene){
-    if(cutChar<cutText.length)cutChar+=0.6;
-    if(k["enter"]){cutscene=false;k["enter"]=false;}
+  if(gameOver){
+    if(k["enter"])location.reload();
     return;
   }
 
   let sp=p.speed*(rage?2:1);
-  if(k["shift"])sp=5;
-
   if(k["w"])p.y-=sp;
   if(k["s"])p.y+=sp;
   if(k["a"])p.x-=sp;
   if(k["d"])p.x+=sp;
 
-  if(dogAlive){
-    dog.x+=(p.x-dog.x)*0.06;
-    dog.y+=(p.y-dog.y)*0.06;
-  }
-
   if(k[" "]){
     bullets.push({x:p.x,y:p.y});
-    sfx(600);
     k[" "]=false;
   }
 
-  bullets.forEach(b=>b.y-=7);
+  bullets.forEach(b=>b.y-=6);
+
+  if(dogAlive){
+    dog.x+=(p.x-dog.x)*0.05;
+    dog.y+=(p.y-dog.y)*0.05;
+  }
 
   zombies.forEach(z=>{
     const dx=p.x-z.x,dy=p.y-z.y,d=Math.hypot(dx,dy);
-    z.x+=dx/d*0.4;z.y+=dy/d*0.4;
+    z.x+=dx/d*0.5; z.y+=dy/d*0.5;
 
+    if(d<18 && z.atk<=0){
+      p.life-=8;
+      z.atk=30;
+    }
+    if(z.atk>0)z.atk--;
+
+    z.throw--;
     if(z.throw<=0){
       enemyShots.push({x:z.x,y:z.y,vx:dx/d*3,vy:dy/d*3});
-      z.throw=90;
+      z.throw=100;
     }
-    z.throw--;
-
-    if(d<18 && z.atk<=0){p.life-=5;sfx(200);z.atk=30}
-    if(z.atk>0)z.atk--;
   });
 
   enemyShots.forEach((s,i)=>{
-    s.x+=s.vx;s.y+=s.vy;
-    if(Math.abs(s.x-p.x)<10&&Math.abs(s.y-p.y)<10){
-      p.life-=8;sfx(150);enemyShots.splice(i,1);
+    s.x+=s.vx; s.y+=s.vy;
+    if(Math.abs(s.x-p.x)<10 && Math.abs(s.y-p.y)<10){
+      p.life-=6;
+      enemyShots.splice(i,1);
     }
   });
 
   bullets.forEach((b,i)=>{
     zombies.forEach((z,zi)=>{
       if(Math.abs(b.x-z.x)<8){
-        z.life-=rage?20:10;
+        z.life-=10;
         bullets.splice(i,1);
         if(z.life<=0)zombies.splice(zi,1);
       }
@@ -137,72 +110,76 @@ function update(){
   });
 
   if(zombies.length===0 && room<4){
-    room++; spawnZombies(10);
-    playMusic(90+room*20);
+    room++;
+    spawnZombies(10);
   }
 
   if(room===4){
-    boss.spawn--;
-    if(boss.spawn<=0){
-      zombies.push({x:boss.x,y:boss.y+40,life:25,atk:0,throw:50});
-      boss.spawn=80;
-    }
-
     const dx=p.x-boss.x,dy=p.y-boss.y,d=Math.hypot(dx,dy);
-    boss.x+=dx/d*0.4;boss.y+=dy/d*0.4;
+    boss.x+=dx/d*0.4; boss.y+=dy/d*0.4;
 
+    boss.throw--;
     if(boss.throw<=0){
-      enemyShots.push({x:boss.x,y:boss.y,vx:dx/d*5,vy:dy/d*5});
+      enemyShots.push({x:boss.x,y:boss.y,vx:dx/d*4,vy:dy/d*4});
       boss.throw=25;
     }
-    boss.throw--;
 
     bullets.forEach((b,i)=>{
-      if(Math.abs(b.x-boss.x)<22){
-        if(boss.life1>0)boss.life1-=rage?20:8;
-        else boss.life2-=rage?20:8;
+      if(Math.abs(b.x-boss.x)<20){
+        if(boss.life1>0)boss.life1-=8;
+        else boss.life2-=8;
         bullets.splice(i,1);
       }
     });
 
     zombies.forEach(z=>{
-      if(dogAlive && Math.abs(z.x-p.x)<18){
-        dogAlive=false; rage=true; sfx(80,0.4);
-        cutscene=true;
-        cutText="Meu cachorro se jogou na frente do ataque...\nEle me salvou.\nAgora só resta a fúria.";
-        cutChar=0;
-        playMusic(160);
+      if(dogAlive && Math.abs(z.x-p.x)<20){
+        dogAlive=false;
+        rage=true;
       }
     });
+  }
 
-    if(boss.life1<=0 && boss.life2<=0){
-      credits=true;
-      playMusic(60);
+  if(p.life<=0){
+    gameOver=true;
+  }
+}
+
+/* ================= CENÁRIOS ================= */
+function drawScenario(){
+  if(room===1){
+    ctx.fillStyle="#2f2f2f";ctx.fillRect(0,0,640,480);
+    for(let i=0;i<8;i++){
+      ctx.fillStyle="#444";
+      ctx.fillRect(i*80,300,60,20);
+    }
+  }
+  if(room===2){
+    ctx.fillStyle="#3a3a3a";ctx.fillRect(0,0,640,480);
+    for(let i=0;i<6;i++){
+      ctx.fillStyle="#555";
+      ctx.fillRect(i*100+20,200,40,80);
+    }
+  }
+  if(room===3){
+    ctx.fillStyle="#1f2a2f";ctx.fillRect(0,0,640,480);
+    for(let i=0;i<6;i++){
+      ctx.fillStyle="#2ecc71";
+      ctx.fillRect(i*100+30,260,30,30);
+    }
+  }
+  if(room===4){
+    ctx.fillStyle="#120909";ctx.fillRect(0,0,640,480);
+    for(let i=0;i<20;i++){
+      ctx.fillStyle="#2a0000";
+      ctx.fillRect(Math.random()*640,Math.random()*480,4,4);
     }
   }
 }
 
 /* ================= DRAW ================= */
-function bar(x,y,w,h,v,m,c){
-  ctx.fillStyle="#000";ctx.fillRect(x,y,w,h);
-  ctx.fillStyle=c;ctx.fillRect(x,y,w*(v/m),h);
-}
-
-function drawBackground(){
-  const colors=[
-    "#2a2a2a","#2f2f2f","#262626","#1a1a1a"
-  ];
-  ctx.fillStyle=colors[room-1];
-  ctx.fillRect(0,0,640,480);
-
-  for(let i=0;i<40;i++){
-    ctx.fillStyle="#333";
-    ctx.fillRect((i*53)%640,(i*91)%480,6,6);
-  }
-}
-
 function draw(){
-  drawBackground();
+  drawScenario();
 
   if(rage){
     ctx.strokeStyle="red";
@@ -224,14 +201,11 @@ function draw(){
   zombies.forEach(z=>{
     ctx.fillStyle="#3fa34d";
     ctx.fillRect(z.x-5,z.y-5,10,10);
-    bar(z.x-8,z.y-12,16,3,z.life,30,"#f00");
   });
 
   if(room===4){
     ctx.fillStyle="#7b1e1e";
-    ctx.fillRect(boss.x-22,boss.y-22,44,44);
-    bar(180,10,280,8,boss.life1,250,"#f00");
-    bar(180,22,280,8,boss.life2,250,"#ff7777");
+    ctx.fillRect(boss.x-20,boss.y-20,40,40);
   }
 
   enemyShots.forEach(s=>{
@@ -245,23 +219,16 @@ function draw(){
   });
 
   ctx.fillStyle="#fff";
-  ctx.fillText("Sala: "+room,10,20);
-  ctx.fillText("Vida: "+p.life,10,40);
+  ctx.fillText("Vida: "+p.life,10,20);
+  ctx.fillText("Sala: "+room,10,40);
 
-  if(cutscene){
+  if(gameOver){
     ctx.fillStyle="rgba(0,0,0,0.8)";
-    ctx.fillRect(40,320,560,140);
-    ctx.fillStyle="#fff";
-    ctx.fillText(cutText.substring(0,cutChar),60,360);
-  }
-
-  if(credits){
-    ctx.fillStyle="#000";
     ctx.fillRect(0,0,640,480);
+    ctx.fillStyle="#f00";
+    ctx.fillText("GAME OVER",280,220);
     ctx.fillStyle="#fff";
-    ctx.fillText("Echoes After Pandemic",200,scrollY);
-    ctx.fillText("Criado por Jonathan Pereira",180,scrollY+40);
-    ctx.fillText("Obrigado por jogar",220,scrollY+80);
+    ctx.fillText("Pressione ENTER para reiniciar",200,260);
   }
 }
 
